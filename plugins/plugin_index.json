@@ -141,5 +141,14 @@
     "logo": "plugin_resources/logo/logo_QXDM_Dumptime_Tool.png",
     "entry": "plugin.py",
     "zip_url": "https://raw.githubusercontent.com/miniLQ/onemore/refs/heads/master/release/QXDM_Dumptime_Tool.zip"
-  }
+  },
+  {
+    "name": "AudioDump_Converter",
+    "description": "音频日志时间转换工具 - 解析 AudioDump/OnFileEvent 日志，双向转换日志时间与音频文件进度",
+    "version": "1.0.0",
+    "author": "charter",
+    "logo": "plugin_resources/logo/logo_AudioDump_Converter.png",
+    "entry": "plugin.py",
+    "zip_url": "https://raw.githubusercontent.com/miniLQ/onemore/refs/heads/master/release/AudioDump_Converter.zip"
+  } 
 ]
