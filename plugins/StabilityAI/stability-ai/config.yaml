@@ -1,0 +1,33 @@
+ai:
+  api_key: ''
+  base_url: ''
+  max_tokens: 4000
+  model: gpt-4.1
+  temperature: 0.3
+  timeout: 60
+analysis:
+  max_calltrace_depth: 30
+  max_log_lines: 100000
+  verbose: false
+logging:
+  file: ''
+  level: INFO
+output:
+  ai_language: zh-CN
+  default_format: yaml
+  include_full_log: false
+privacy:
+  allow_file_paths: true
+  auto_sanitize: true
+  sanitize_patterns:
+  - IMEI:\s*\d+
+  - Serial Number:\s*\S+
+  - MAC Address:\s*[0-9a-fA-F:]{17}
+  sanitize_replacement: '[REDACTED]'
+symbolization:
+  addr2line_tool: addr2line
+  cache_dir: ./symbol_cache
+  ko_paths: []
+  nm_tool: nm
+  timeout: 10
+  vmlinux: ''

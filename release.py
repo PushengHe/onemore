@@ -147,7 +147,7 @@ def print_github_release_instructions(version, zip_path, notes_file):
     print("="*60)
     
     print(f"""
-1. 前往 GitHub 仓库: https://github.com/miniLQ/onemore/releases/new
+1. 前往 GitHub 仓库: https://github.com/PushengHe/onemore/releases/new
 
 2. 填写 Release 信息:
    - Tag: v{version}

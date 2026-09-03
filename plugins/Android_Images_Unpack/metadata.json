@@ -1,0 +1,9 @@
+  {
+    "name": "Android_Images_Unpack",
+    "description": "Android系统镜像解包工具，支持多种格式的Android系统镜像解包，包括boot、recovery、system等。",
+    "version": "v15_r1",
+    "author": "iliuqi",
+    "logo": "logo.png",
+    "entry": "plugin.py",
+    "zip_url": "https://raw.githubusercontent.com/PushengHe/onemore/refs/heads/dev/release/Android_Images_Unpack.zip"
+  }

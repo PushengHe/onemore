@@ -79,7 +79,7 @@ jobs:
 
           # body: |
           #   Changes in this Release
-          #   https://github.com/miniLQ/onemore/compare/${{ env.previous_tag }}...${{ env.tag }}
+          #   https://github.com/PushengHe/onemore/compare/${{ env.previous_tag }}...${{ env.tag }}
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1

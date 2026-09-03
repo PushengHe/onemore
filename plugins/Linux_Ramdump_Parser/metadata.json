@@ -1,0 +1,9 @@
+{
+    "name": "Linux_Ramdump_Parser",
+    "description": "高通平台开发提供给研发人员进行fulldump/minidump的解析使用的一个工具",
+    "version": "opensource-tools.lnx.1.0.r352-rel_6ef890b8",
+    "logo": "logo.png",
+    "author": "iliuqi",
+    "entry": "plugin.py",
+    "zip_url": "https://raw.githubusercontent.com/PushengHe/onemore/refs/heads/dev/release/Linux_Ramdump_Parser.zip"
+}

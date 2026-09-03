@@ -1,0 +1,9 @@
+{
+    "name": "Linux_Ramdump_Parser_qcm6125",
+    "description": "高通 QCM6125 平台 fulldump/minidump 解析工具",
+    "version": "opensource-tools.lnx.1.0.r352-rel_6ef890b8",
+    "logo": "logo.png",
+    "author": "heps",
+    "entry": "plugin.py",
+    "zip_url": "https://raw.githubusercontent.com/PushengHe/onemore/refs/heads/master/release/Linux_Ramdump_Parser_qcm6125.zip"
+}

@@ -45,7 +45,7 @@ class UpdateChecker(QThread):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.repo_owner = "miniLQ"
+        self.repo_owner = "PushengHe"
         self.repo_name = "onemore"
         
     def run(self):

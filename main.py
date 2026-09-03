@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QApplication
 from qfluentwidgets import FluentTranslator
 
 from app.common.config import cfg
-from app.view.register_window import RegisterWindow
+from app.view.main_window import MainWindow
 
 
 # 设置根目录
@@ -54,7 +54,7 @@ app.installTranslator(translator)
 app.installTranslator(galleryTranslator)
 
 # create main window
-w = RegisterWindow()
+w = MainWindow()
 w.show()
 
 app.exec()
