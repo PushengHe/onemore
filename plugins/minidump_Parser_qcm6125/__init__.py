@@ -1,0 +1,1 @@
+# Qualcomm QCM6125 minidump parser plugin.

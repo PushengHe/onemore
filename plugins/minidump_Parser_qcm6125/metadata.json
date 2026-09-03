@@ -1,0 +1,9 @@
+{
+    "name": "minidump_Parser_qcm6125",
+    "description": "高通 QCM6125 平台 minidump 拆分与 ELF 生成工具",
+    "version": "1.0.0",
+    "logo": "logo.png",
+    "author": "heps",
+    "entry": "plugin.py",
+    "zip_url": "https://raw.githubusercontent.com/PushengHe/onemore/refs/heads/master/release/minidump_Parser_qcm6125.zip"
+}
