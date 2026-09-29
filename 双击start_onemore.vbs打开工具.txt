@@ -1,0 +1,2 @@
+双击start_onemore.vbs打开工具
+Double-click start_onemore.vbs to open OneMore.
