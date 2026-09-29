@@ -1,10 +1,14 @@
 from PyQt6.QtCore import Qt, QThread
+from PyQt6 import sip
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 from qfluentwidgets import CardWidget
 import sys
 from pathlib import Path
 import os
 import subprocess
+from datetime import datetime
+
+from plugins.minidump_Parser_qcm6125.minidump.ramparse_command import build_ramparse_command
 
 from PyQt6.QtCore import Qt, QPoint, QSize, QUrl, QRect, QPropertyAnimation, pyqtSignal, QObject
 from PyQt6.QtGui import QIcon, QFont, QColor, QPainter
@@ -86,7 +90,7 @@ class AppInfoCard(SimpleCardWidget):
         #self.commentWidget = StatisticsWidget('评论数', '3K', self)
 
         self.descriptionLabel = BodyLabel(
-            '用于拆分高通 QCM6125 平台的 minidump，并生成 ap_minidump.elf', self)
+            '用于拆分高通 QCM6125 平台的 minidump，生成 ap_minidump.elf，同步生成解析输出文件', self)
         self.descriptionLabel.setWordWrap(True)
 
         self.tagButton = PillPushButton('QCM6125', self)
@@ -187,8 +191,12 @@ class Worker(QThread):
         try:
             for command in self.commands:
                 logger.info("Run command: {}".format(subprocess.list2cmdline(command)))
-                result = subprocess.run(command, env=self.env, creationflags=creationflags)
+                result = subprocess.run(command, env=self.env, creationflags=creationflags,
+                                        capture_output=not self.show_terminal, text=not self.show_terminal,
+                                        errors='replace' if not self.show_terminal else None)
                 if result.returncode != 0:
+                    logger.error("Command failed (exit {}): {}".format(
+                        result.returncode, ((result.stdout or '') + (result.stderr or ''))[-6000:]))
                     self.signal.emit("ERROR")
                     return
         except OSError as error:
@@ -206,7 +214,7 @@ class DescriptionCard(HeaderCardWidget):
         super().__init__(parent)
         self.descriptionLabel = BodyLabel(
             '选择高通 rawdump/minidump 文件后，可将其中的 md_* 段拆分到输出目录，'
-            '并按需生成供 LDRP 使用的 ap_minidump.elf。', self)
+            '生成 ap_minidump.elf；选择 vmlinux 后可解析输出目录中的 Minidump。', self)
 
         self.descriptionLabel.setWordWrap(True)
         self.viewLayout.addWidget(self.descriptionLabel)
@@ -225,6 +233,7 @@ class SettinsCard(GroupHeaderCardWidget):
 
         # 初始化参数
         self.dumpfile = ""
+        self.vmlinux_file = ""
         self.output_path = linuxPath2winPath(os.path.join(CURRENT_PLUGIN_DIR, 'minidump', 'minidump_out'))
         os.makedirs(self.output_path, exist_ok=True)
 
@@ -236,6 +245,8 @@ class SettinsCard(GroupHeaderCardWidget):
         self.chooseButton = PushButton("选择")
         #self.fileLineEdit = LineEdit()
         self.vmlinuxButton = PushButton("选择")
+        self.kernelButton = PushButton("选择")
+        self.kernelButton.clicked.connect(self.kernelButtonClicked)
 
         # mod_path参数部件
         self.ModlineEdit = LineEdit()
@@ -256,6 +267,7 @@ class SettinsCard(GroupHeaderCardWidget):
         # 设置部件的固定宽度
         self.chooseButton.setFixedWidth(120)
         self.vmlinuxButton.setFixedWidth(120)
+        self.kernelButton.setFixedWidth(120)
         #self.fileLineEdit.setFixedWidth(320)
 
         self.lineEdit.setFixedWidth(320)
@@ -276,8 +288,9 @@ class SettinsCard(GroupHeaderCardWidget):
 
         # 底部运行按钮以及提示
         self.hintIcon = IconWidget(InfoBarIcon.INFORMATION)
-        self.hintLabel = BodyLabel("点击运行按钮开始解析")
-        self.runButton = PrimaryPushButton(FluentIcon.PLAY_SOLID, "运行")
+        self.hintLabel = BodyLabel("运行可拆分文件，解析 Minidump 可分析现有输出")
+        self.runButton = PrimaryPushButton(FluentIcon.PLAY_SOLID, "解压Minidump")
+        self.parseButton = PrimaryPushButton(FluentIcon.PLAY, "解析 Minidump")
         self.bottomLayout = QHBoxLayout()
 
         # 设置底部工具栏布局
@@ -288,6 +301,7 @@ class SettinsCard(GroupHeaderCardWidget):
         self.bottomLayout.addWidget(self.hintLabel, 0, Qt.AlignmentFlag.AlignLeft)
         self.bottomLayout.addStretch(1)
         self.bottomLayout.addWidget(self.runButton, 0, Qt.AlignmentFlag.AlignRight)
+        self.bottomLayout.addWidget(self.parseButton, 0, Qt.AlignmentFlag.AlignRight)
         self.bottomLayout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         # 设置底部状态布局
@@ -299,12 +313,15 @@ class SettinsCard(GroupHeaderCardWidget):
 
         self.ramdumpGroup = self.addGroup("{}/images/Rocket.svg".format(resource_path), "Minidump文件", "选择 rawdump/minidump 文件", self.chooseButton)
         self.vmlinuxGroup = self.addGroup("{}/images/jsdesign.svg".format(resource_path), "输出目录", self.output_path, self.vmlinuxButton)
+        self.kernelGroup = self.addGroup("{}/images/jsdesign.svg".format(resource_path), "vmlinux", "选择内核符号文件以解析 Minidump", self.kernelButton)
         self.addGroup("{}/images/Joystick.svg".format(resource_path), "解析方式", "选择是否生成 ap_minidump.elf", self.platformComboBox)
         self.addGroup("{}/images/Joystick.svg".format(resource_path), "运行终端", "设置是否显示命令行终端", self.comboBox)
         self.vBoxLayout.addLayout(self.bottomLayout)
+        self.vBoxLayout.addLayout(self.bottomStateLayout)
 
         # 设置运行按钮的点击事件
         self.runButton.clicked.connect(self.runButtonClicked)
+        self.parseButton.clicked.connect(self.parseButtonClicked)
 
     def chooseButtonClicked(self):
         logger.info("Choose Button Clicked")
@@ -337,6 +354,13 @@ class SettinsCard(GroupHeaderCardWidget):
                 self.vmlinuxGroup.setContent("{}.........{}".format(self.output_path[0:50], self.output_path[-70:]))
             else:
                 self.vmlinuxGroup.setContent(self.output_path)
+
+    def kernelButtonClicked(self):
+        selected_path, _ = QFileDialog.getOpenFileName(self, "选择 vmlinux", self.vmlinux_file or "C:/", "All Files (*)")
+        if selected_path:
+            self.vmlinux_file = linuxPath2winPath(selected_path)
+            self.kernelGroup.setContent(self.vmlinux_file)
+            self.kernelButton.setText("已选择")
 
     def comboBoxClicked(self, index):
         logger.info("ComboBox Clicked: {}".format(index))
@@ -391,25 +415,67 @@ class SettinsCard(GroupHeaderCardWidget):
             self.stateTooltip.setContent('解析完成')
             self.stateTooltip.setState(True)
             self.runButton.setEnabled(True)
+            self.parseButton.setEnabled(True)
             self.stateTooltip.show()
 
         elif value == "ERROR":
             self.stateTooltip.setContent('解析失败')
             self.stateTooltip.setState(False)
             self.runButton.setEnabled(True)
+            self.parseButton.setEnabled(True)
             self.stateTooltip.show()
         else:
             logger.info(value)
 
         # 打开输出目录
-        if os.path.isdir(self.output_path):
-            os.startfile(self.output_path)
+        if os.path.isdir(self.task_output_path):
+            os.startfile(self.task_output_path)
 
     def start_task(self, commands, show_terminal, env):
         logger.info("Start task")
         self.worker = Worker(commands, show_terminal=show_terminal, env=env)
         self.worker.signal.connect(self.customSignalHandler)
         self.worker.start()
+
+    def showTaskState(self, title, content):
+        if self.stateTooltip is not None and not sip.isdeleted(self.stateTooltip):
+            self.bottomStateLayout.removeWidget(self.stateTooltip)
+            self.stateTooltip.deleteLater()
+        self.stateTooltip = StateToolTip(title, content, self)
+        self.bottomStateLayout.addWidget(self.stateTooltip, 0, Qt.AlignmentFlag.AlignRight)
+        self.stateTooltip.show()
+
+    def parseButtonClicked(self):
+        if not self.vmlinux_file or not os.path.isfile(self.vmlinux_file):
+            Flyout.create(icon=InfoBarIcon.ERROR, title='缺少 vmlinux',
+                          content='请先选择有效的 vmlinux 文件', target=self.parseButton, parent=self.window())
+            return
+
+        python_path = PYTHON_BIN_PATH if os.path.isfile(PYTHON_BIN_PATH) else sys.executable
+        parser_path = os.path.join(CURRENT_PLUGIN_DIR, 'linux-ramdump-parser-v2', 'ramparse.py')
+        if not os.path.isfile(parser_path):
+            Flyout.create(icon=InfoBarIcon.ERROR, title='缺少 ramparse',
+                          content=parser_path, target=self.parseButton, parent=self.window())
+            return
+        analysis_path = os.path.join(self.output_path, 'minidump_out_analysis_' + datetime.now().strftime('%Y%m%d%H%M%S'))
+        try:
+            command = build_ramparse_command(python_path, parser_path, self.vmlinux_file,
+                                             self.output_path, analysis_path)
+        except (OSError, ValueError) as error:
+            Flyout.create(icon=InfoBarIcon.ERROR, title='无法解析 Minidump',
+                          content=str(error), target=self.parseButton, parent=self.window())
+            return
+
+        os.makedirs(analysis_path, exist_ok=True)
+        self.task_output_path = analysis_path
+        self.showTaskState('正在解析 Minidump', '请耐心等待')
+        self.runButton.setDisabled(True)
+        self.parseButton.setDisabled(True)
+
+        env = os.environ.copy()
+        env['PATH'] = os.pathsep.join([env.get('PATH', ''), PYTHON_BIN_ROOT,
+                                      os.path.join(PYTHON_BIN_ROOT, 'Scripts'), GNU_TOOLS_PATH])
+        self.start_task([command], self.comboBox.currentText() == '始终显示', env)
 
     def runButtonClicked(self):
         logger.info("Run Button Clicked")
@@ -428,15 +494,12 @@ class SettinsCard(GroupHeaderCardWidget):
         if self.dumpfile == "" or self.output_path == "":
             self.showNoSelectFileFlyout()
         else:
-            self.stateTooltip = StateToolTip('正在解析', '客官请耐心等待哦~~', self)
-            # 状态提示放到中心位置
-            self.bottomStateLayout.addWidget(self.stateTooltip, 0, Qt.AlignmentFlag.AlignRight)
-            self.vBoxLayout.addLayout(self.bottomStateLayout)
-            # 显示状态提示
-            self.stateTooltip.show()
+            self.showTaskState('正在拆分 Minidump', '请耐心等待')
 
             # runbuton按钮设置为不可点击
             self.runButton.setDisabled(True)
+            self.parseButton.setDisabled(True)
+            self.task_output_path = self.output_path
 
             if not os.path.exists(self.output_path):
                 os.makedirs(self.output_path)
