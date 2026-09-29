@@ -189,7 +189,8 @@ class Worker(QThread):
         creationflags = subprocess.CREATE_NEW_CONSOLE if self.show_terminal else subprocess.CREATE_NO_WINDOW
 
         try:
-            for command in self.commands:
+            commands = self.commands() if callable(self.commands) else self.commands
+            for command in commands:
                 logger.info("Run command: {}".format(subprocess.list2cmdline(command)))
                 result = subprocess.run(command, env=self.env, creationflags=creationflags,
                                         capture_output=not self.show_terminal, text=not self.show_terminal,
@@ -199,9 +200,9 @@ class Worker(QThread):
                         result.returncode, ((result.stdout or '') + (result.stderr or ''))[-6000:]))
                     self.signal.emit("ERROR")
                     return
-        except OSError as error:
+        except Exception as error:
             logger.error("Failed to run minidump parser: {}".format(error))
-            self.signal.emit("ERROR")
+            self.signal.emit("ERROR:{}".format(error))
             return
 
         self.signal.emit("SUCCESS")
@@ -424,11 +425,17 @@ class SettinsCard(GroupHeaderCardWidget):
             self.runButton.setEnabled(True)
             self.parseButton.setEnabled(True)
             self.stateTooltip.show()
+        elif value.startswith("ERROR:"):
+            self.stateTooltip.setContent('解析失败: {}'.format(value[6:]))
+            self.stateTooltip.setState(False)
+            self.runButton.setEnabled(True)
+            self.parseButton.setEnabled(True)
+            self.stateTooltip.show()
         else:
             logger.info(value)
 
         # 打开输出目录
-        if os.path.isdir(self.task_output_path):
+        if value == "SUCCESS" and os.path.isdir(self.task_output_path):
             os.startfile(self.task_output_path)
 
     def start_task(self, commands, show_terminal, env):
@@ -458,15 +465,6 @@ class SettinsCard(GroupHeaderCardWidget):
                           content=parser_path, target=self.parseButton, parent=self.window())
             return
         analysis_path = os.path.join(self.output_path, 'minidump_out_analysis_' + datetime.now().strftime('%Y%m%d%H%M%S'))
-        try:
-            command = build_ramparse_command(python_path, parser_path, self.vmlinux_file,
-                                             self.output_path, analysis_path)
-        except (OSError, ValueError) as error:
-            Flyout.create(icon=InfoBarIcon.ERROR, title='无法解析 Minidump',
-                          content=str(error), target=self.parseButton, parent=self.window())
-            return
-
-        os.makedirs(analysis_path, exist_ok=True)
         self.task_output_path = analysis_path
         self.showTaskState('正在解析 Minidump', '请耐心等待')
         self.runButton.setDisabled(True)
@@ -475,7 +473,16 @@ class SettinsCard(GroupHeaderCardWidget):
         env = os.environ.copy()
         env['PATH'] = os.pathsep.join([env.get('PATH', ''), PYTHON_BIN_ROOT,
                                       os.path.join(PYTHON_BIN_ROOT, 'Scripts'), GNU_TOOLS_PATH])
-        self.start_task([command], self.comboBox.currentText() == '始终显示', env)
+        vmlinux_path = self.vmlinux_file
+        dump_path = self.output_path
+
+        def prepare_commands():
+            command = build_ramparse_command(python_path, parser_path, vmlinux_path,
+                                             dump_path, analysis_path)
+            os.makedirs(analysis_path, exist_ok=True)
+            return [command]
+
+        self.start_task(prepare_commands, self.comboBox.currentText() == '始终显示', env)
 
     def runButtonClicked(self):
         logger.info("Run Button Clicked")
