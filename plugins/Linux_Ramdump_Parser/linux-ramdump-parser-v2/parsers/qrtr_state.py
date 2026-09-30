@@ -77,9 +77,6 @@ class QrtrParse(RamParser):
         global node_id_offset, ep_offset, ep_xmit_offset, read_data_offset, rx_func_offset
         global kobj_offset, name_offset
 
-        if node_id_offset == 0 or node_id_offset == None:
-            node_id_offset = self.ramdump.field_offset('struct qrtr_node', 'nid')
-
         # Get the values to be printed
         node_id = ram_dump.read_int(qn_desc + node_id_offset)
 

@@ -33,8 +33,6 @@ from ramdump import RamDump
 from ramdump import VCPU_CMM_FILES
 from print_out import print_out_str, set_outfile, print_out_section, print_out_exception, flush_outfile
 from sched_info import verify_active_cpus
-from utils.print_color import print_colored_message
-
 # Please update version when something is changed!'
 VERSION = '2.0'
 # Requires Python 3.5 or newer.
@@ -267,6 +265,11 @@ if __name__ == '__main__':
     parser.add_option('', '--skip_TLB_Cache_parse', action='store_true', help='Skip parsing TLB Cache Dumps in parse_debug_image')
     parser.add_option('--iommu-pg-table-format', action='store', choices=['fastrpc', 'default'],
                       default='default')
+    parser.add_option("--zram_parser_override", type='string', dest="zram_parser_override",
+                      help="""
+                      Specify a separate program to parse ZRAM-compressed pages with. The program must take in
+                      compressed input through stdin and output decompressed output through stdout.
+                      """)
 
     for p in parser_util.get_parsers():
         parser.add_option(p.shortopt or '',
@@ -564,7 +567,6 @@ if __name__ == '__main__':
     if options.timeout:
         from func_timeout import func_timeout, FunctionTimedOut
 
-    longopt_max_len = max([len(p.longopt) for p in parser_util.get_parsers()])
     print_out_str("Time taken to setup the subparsers run : {}".format(time.time()-starttime))
     starttime = time.time()
     for i,p in enumerate(parsers_to_run):
@@ -581,8 +583,8 @@ if __name__ == '__main__':
 
 
 
-        print("    [%02d/%02d] %s ... \t" % (i + 1, len(parsers_to_run), p.longopt+ ' ' * (longopt_max_len - len(p.longopt))), end='', flush=True)
-        
+        print("    [%d/%d] %s ... " %
+                         (i + 1, len(parsers_to_run), p.longopt), end='', flush=True)
         before = time.time()
         print_out_str("start time {0}".format(before))
         with print_out_section(p.cls.__name__):
@@ -594,22 +596,17 @@ if __name__ == '__main__':
                         print_out_str(e)
                 else:
                     p.cls(dump).parse()
-                after = time.time()
-                print_out_str("end time {0} time cost {1} for {2}".format(after, (after - before), p.cls.__name__))
-                sys.stdout.write("%fs" % (after - before))
-                print_colored_message("SUCCESS!", "Green")
             except:
                 # log exceptions and continue by default
-                after = time.time()
-                print_out_str("end time {0} time cost {1} for {2}".format(after, (after - before), p.cls.__name__))
-                sys.stdout.write("%fs" % (after - before))
                 if not options.debug:
                     print_out_str('!!! Exception while running {0}'.format(p.cls.__name__))
                     print_out_exception()
-                    print_colored_message("FAILED", "Red")
+                    print("FAILED! ")
                 else:
                     raise
-
+        after = time.time()
+        print_out_str("end time {0} time cost {1} for {2}".format(after, (after - before), p.cls.__name__))
+        print("%fs" % (after - before),  flush=True)
         flush_outfile()
 
     sys.stderr.write("\n")

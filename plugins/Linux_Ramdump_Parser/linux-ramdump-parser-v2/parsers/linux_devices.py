@@ -11,7 +11,6 @@
 
 from parser_util import register_parser, RamParser, cleanupString
 import linux_list as llist
-import os
 
 @register_parser('--print-devices', 'Print devices info')
 class DevicesList(RamParser):
@@ -65,7 +64,7 @@ class DevicesList(RamParser):
         return self.device_lists
 
     def parse(self):
-        fout = open(os.path.join(self.ramdump.outdir, "devices.txt"), "w")
+        fout = self.ramdump.open_file('devices.txt')
         print("v.v (struct device)  name                                                                                                 bus_name         driver_data                       v.v (struct cma)    dma_ops \n", file=fout)
         self.get_device_list(fout)
         fout.close()

@@ -180,18 +180,9 @@ class FtraceParser_Event(object):
             time_stamp = self.ramdump.read_u64(
                 buffer_data_page + self.buffer_data_page_time_stamp_offset)
             rb_event = buffer_data_page + self.buffer_data_page_data_offset
-
-            if rb_event is None or rb_event == 0:
-                print_out_str("[LIUQI] rb_event is None or 0, skipping buffer page entry at {0}".format(hex(buffer_page_entry)))
-                return
-
             total_read = 0
             while (total_read < commit):
                 time_delta = self.ramdump.read_u32(rb_event + self.rb_event_timedelta_offset)
-                if time_delta == 0 or time_delta == None:
-                    # 跳过
-                    print_out_str("[LIUQI] time_delta is 0, skipping event at {0}".format(hex(rb_event)))
-                    return
                 time_delta = time_delta >> 5
                 # print_out_str("time_delta after = {0} ".format(time_delta))
                 rb_event_timestamp = rb_event_timestamp + time_delta
@@ -259,18 +250,14 @@ class FtraceParser_Event(object):
             if pid == 0:
                 comm = "<idle>"
             else:
-                try:
-                    tpid = pid & (self.pid_max - 1)
-                    cmdline_map = self.savedcmd.map_pid_to_cmdline[tpid]
-                    if cmdline_map != -1 and cmdline_map != None:
-                        map_cmdline_to_pid = self.savedcmd.map_cmdline_to_pid
-                        cmdline_tpid = self.ramdump.read_int(map_cmdline_to_pid + cmdline_map * 4)
-                        if cmdline_tpid == pid:
-                            saved_cmdlines = self.savedcmd.saved_cmdlines
-                            comm = self.ramdump.read_cstring(saved_cmdlines + cmdline_map * 16, 16) #TASK_COMM_LEN
-                except AttributeError as err:
-                    print_out_str("savedcmd is not initialized, pid = {0} comm = {1}".format(pid, comm))
-
+                tpid = pid & (self.pid_max - 1)
+                cmdline_map = self.savedcmd.map_pid_to_cmdline[tpid]
+                if cmdline_map != -1 and cmdline_map != None:
+                    map_cmdline_to_pid = self.savedcmd.map_cmdline_to_pid
+                    cmdline_tpid = self.ramdump.read_int(map_cmdline_to_pid + cmdline_map * 4)
+                    if cmdline_tpid == pid:
+                        saved_cmdlines = self.savedcmd.saved_cmdlines
+                        comm = self.ramdump.read_cstring(saved_cmdlines + cmdline_map * 16, 16) #TASK_COMM_LEN
         comm = "{}-{}".format(comm, pid)
         self.comm_pid_dict[pid] = comm
         return comm

@@ -36,7 +36,7 @@ class SmmuParser(RamParser):
         # Write output to a file
 
         file_name = "smmu_s1_fault.txt"
-        file = open(os.path.join(self.ramdump.outdir,file_name), "w")
+        file = self.ramdump.open_file(file_name,"w")
         file.write(parsed_text)
         file.close()
 
@@ -131,7 +131,7 @@ class SmmuParser(RamParser):
                 # (100)[2]
                 binary = self.reverse_binary(binary)
             except Exception as e:
-                print_out.print_out_str("Error:" + original + "(" + hexadecimal + ") couldn't convert, assuming 0x0")
+                print("Error:" + original + "(" + hexadecimal + ") couldn't convert, assuming 0x0")
                 binary = zeroes
 
         return binary
@@ -230,7 +230,7 @@ class SmmuParser(RamParser):
 
         if fault_idx == -1:
             # Index to the error message of the array
-            print_out.print_out_str("Error finding fault on parse_FSR()")
+            print("Error finding fault on parse_FSR()")
             fault_idx = len(faults) -1
 
         aux = faults[fault_idx]
@@ -437,7 +437,7 @@ class SmmuParser(RamParser):
                 if line.find(reg) != -1:
                     return ""
             new_line = "Unknown message disregarded, line says: " + line
-            print_out.print_out_str(new_line)
+            print(new_line)
 
         self.__global_text = self.__global_text + new_line + "\n"
 

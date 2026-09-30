@@ -38,7 +38,12 @@ def register(main_window):
         if state != 1:
                 logger.warning(f"[TAB WARNING] can not handle Tab change，can not find route_key={route_key}")
 
-    appcard = main_window.qcomInterface.addCard(os.path.join(CURRENT_PLUGIN_DIR, "logo.png"), "Linux Ramdump Parser", '@designed by iliuqi.', "Linux Ramdump Parser")
+    main_window.qcomInterface.addCard(
+        os.path.join(CURRENT_PLUGIN_DIR, "logo.png"),
+        "Linux Ramdump Parser",
+        '@designed by heps.',
+        UNIQUE_NAME,
+    )
 
     main_window.registerPluginOpener(UNIQUE_NAME, on_open)
     main_window.registerTabChangedHandler(UNIQUE_NAME, on_tab_changed)

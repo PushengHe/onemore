@@ -4,6 +4,8 @@ from qfluentwidgets import CardWidget
 import sys
 from pathlib import Path
 import os
+import re
+import time
 import subprocess
 
 from PyQt6.QtCore import Qt, QPoint, QSize, QUrl, QRect, QPropertyAnimation, pyqtSignal, QObject
@@ -24,7 +26,7 @@ from app.common.config import ROOTPATH
 from app.common.logging import logger
 from app.common.utils import linuxPath2winPath
 
-GNU_TOOLS_PATH = os.path.join(ROOTPATH, 'tools', 'gnu-tools')
+GNU_TOOLS_PATH = os.path.join(ROOTPATH, 'tools', 'gnu-tools-14')
 PYTHON_BIN_ROOT = linuxPath2winPath(os.path.join(ROOTPATH, 'tools', 'Python310'))
 PYTHON_BIN_PATH = linuxPath2winPath(os.path.join(ROOTPATH, 'tools', 'Python310', 'python.exe'))
 
@@ -78,7 +80,7 @@ class AppInfoCard(SimpleCardWidget):
 
         #self.companyLabel = HyperlinkLabel(
         #    QUrl('https://qfluentwidgets.com'), 'Shokokawaii Inc.', self)
-        self.companyLabel = CaptionLabel('@Designed by iliuqi.', self)
+        self.companyLabel = CaptionLabel('@Designed by heps.', self)
         #self.installButton.setFixedWidth(160)
 
         #self.scoreWidget = StatisticsWidget('平均', '5.0', self)
@@ -86,10 +88,10 @@ class AppInfoCard(SimpleCardWidget):
         #self.commentWidget = StatisticsWidget('评论数', '3K', self)
 
         self.descriptionLabel = BodyLabel(
-            'Linux Ramdump Parser 是高通平台开发提供给研发人员进行Ramdump的解析使用的一个工具', self)
+            'Linux Ramdump Parser 用于解析 Qcomm 平台的 Ramdump', self)
         self.descriptionLabel.setWordWrap(True)
 
-        self.tagButton = PillPushButton('QCOM', self)
+        self.tagButton = PillPushButton('Qcomm', self)
         self.tagButton.setCheckable(False)
         setFont(self.tagButton, 12)
         self.tagButton.setFixedSize(80, 32)
@@ -171,38 +173,86 @@ class AppInfoCard(SimpleCardWidget):
             
     #         self.installButtonStateTooltip.show()
 
+PROGRESS_RE = re.compile(r'\[(\d+)/(\d+)\]\s+(\S+)')
+
+
 class  Worker(QThread):
     signal = pyqtSignal(str)
+    progress = pyqtSignal(str)
 
-    def __init__(self, command, shell=True, env=None):
+    def __init__(self, command, shell=True, env=None, done_file=None):
         super().__init__()
         self.command = command
         self.shell = shell
         self.env = env
+        self.done_file = done_file
 
     def run(self):
         logger.info("Worker Thread ID: {}".format(QThread.currentThreadId()))
-        #logger.info("Run command: {}".format(self.command))
-
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-
-        if self.shell == True:
-            command = "start cmd /K {}".format(self.command)
+        start = time.time()
+        if self.shell:
+            ok = self._run_in_console(start)
         else:
-            command = self.command
-        #logger.info("Run command: {}".format(self.command))
+            ok = self._run_hidden(start)
+        self.signal.emit("SUCCESS" if ok else "ERROR")
 
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, env=self.env)
-        
+    @staticmethod
+    def _elapsed(start):
+        return time.strftime('%M:%S', time.gmtime(time.time() - start))
+
+    def _run_in_console(self, start):
+        lock_file = self.done_file + '.lock'
+        for f in (self.done_file, lock_file):
+            if os.path.exists(f):
+                os.remove(f)
+        runner = os.path.join(CURRENT_PLUGIN_DIR, 'parse_runner.py')
+        # Args go through env: ConEmu/Cmder re-runs the line via cmd, which strips outer quotes
+        env = dict(self.env or os.environ)
+        env['ONEMORE_PARSE_LOCK'] = lock_file
+        env['ONEMORE_PARSE_DONE'] = self.done_file
+        env['ONEMORE_PARSE_CMD'] = self.command
+        command = subprocess.list2cmdline([sys.executable, runner])
+        subprocess.Popen(command, env=env, creationflags=subprocess.CREATE_NEW_CONSOLE)
+
         while True:
-            line = process.stdout.readline()
-            if not line:
-                break
-            logger.info(line.decode('gbk').strip())
+            if os.path.exists(self.done_file):
+                with open(self.done_file, 'r') as f:
+                    code = f.read().strip()
+                os.remove(self.done_file)
+                return code == '0'
+            if os.path.exists(lock_file):
+                if not self._is_locked(lock_file) and not os.path.exists(self.done_file):
+                    logger.info("Parse console closed before finishing")
+                    return False
+            elif time.time() - start > 60:
+                logger.info("Parse console failed to start")
+                return False
+            self.progress.emit("已用时 {}，进度请查看终端窗口".format(self._elapsed(start)))
+            self.msleep(1000)
 
-        self.signal.emit("SUCCESS")
-        #self.signal.emit("ERROR")
+    @staticmethod
+    def _is_locked(lock_file):
+        import msvcrt
+        try:
+            with open(lock_file, 'r') as f:
+                msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            return False
+        except OSError:
+            return True
+
+    def _run_hidden(self, start):
+        process = subprocess.Popen(self.command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                   env=self.env, creationflags=subprocess.CREATE_NO_WINDOW)
+        self.progress.emit("正在加载 vmlinux 符号...")
+        for raw in process.stdout:
+            line = raw.decode('utf-8', errors='replace').rstrip()
+            logger.info(line)
+            m = PROGRESS_RE.search(line)
+            if m:
+                self.progress.emit("[{}/{}] {}  已用时 {}".format(
+                    m.group(1), m.group(2), m.group(3), self._elapsed(start)))
+        return process.wait() == 0
 
 
 class DescriptionCard(HeaderCardWidget):
@@ -234,6 +284,8 @@ class SettinsCard(GroupHeaderCardWidget):
 
         # 设置状态提示
         self.stateTooltip = None
+        self.worker = None
+        self.progressText = ""
         self.bottomStateLayout = QHBoxLayout()
 
         # 选择按钮以及输入框部件
@@ -271,7 +323,19 @@ class SettinsCard(GroupHeaderCardWidget):
 
         self.platformComboBox.setPlaceholderText("选择平台")
         # TODO: 从配置文件中读取平台信息
-        items = ['blair', 'khaje', 'parrot', 'pitti', 'trinket']
+        items = [
+            'alor', 'aloroemvm', 'alorsvm', 'anorak', 'art', 'artoemvm', 'artsvm', 'atoll', 'bengal', 'blair',
+            'californium', 'canoe', 'canoeoemvm', 'canoesvm', 'cape', 'capesvm', 'cinder', 'cliffs', 'cliffsoemvm', 'cliffssvm',
+            'cobalt', 'crow', 'crowoemvm', 'crowsvm', 'direwolf', 'diwali', 'diwalisvm', 'holi', 'kalama', 'kalamaoemvm',
+            'kalamasvm', 'kera', 'keraoemvm', 'kerasvm', 'khaje', 'kona', 'lagoon', 'lahaina', 'lahainasvm', 'lemans',
+            'lito', 'monaco', 'msmnile', 'neo', 'niobe', 'niobesvm', 'parrot', 'parrotsvm', 'pineapple', 'pineappleoemvm',
+            'pineapplesvm', 'pitti', 'poorwills', 'qcm6490', 'qcm6490svm', 'qcs403', 'qcs405', 'qcs605', 'qcs615', 'qcs8300',
+            'qcs8300svm', 'qcs9100', 'qcs9100svm', 'ravelin', 'ravelinsvm', 'sa8540', 'sa8797p', 'sc7180', 'SC8480xp', 'scuba',
+            'sdm429', 'sdm439', 'sdm710', 'sdm845', 'sdmshrike', 'SDX20', 'sdxbaagha', 'sdxecho', 'sdxkova', 'sdxlemur',
+            'sdxnightjar', 'sdxpinn', 'sdxpinnfotavm', 'sdxpinnsvm', 'sdxprairie', 'seraph', 'seraphoemvm', 'seraphsvm', 'shima', 'shimasvm',
+            'steppe', 'sun', 'sunoemvm', 'sunsvm', 'taro', 'tarosvm', 'trinket', 'tuna', 'tunaoemvm', 'tunasvm',
+            'ukee', 'ukeesvm', 'vienna', 'volcano', 'volcanooemvm', 'volcanosvm', 'yupik', 'yupiksvm',
+        ]
         self.platformComboBox.setFixedWidth(120)
         # 设置默认值
         self.platformComboBox.setCurrentIndex(-1)
@@ -410,34 +474,59 @@ class SettinsCard(GroupHeaderCardWidget):
             parent=self.window()
         )
 
+    def showParsingFlyout(self):
+        Flyout.create(
+            icon=InfoBarIcon.WARNING,
+            title='正在解析',
+            content="解析尚未完成，请等待结束后再运行\n{}".format(self.progressText),
+            target=self.runButton,
+            parent=self.window()
+        )
+
+    def onStateTooltipClosed(self):
+        self.stateTooltip = None
+
+    def progressHandler(self, text):
+        self.progressText = text
+        if self.stateTooltip:
+            self.stateTooltip.setContent(text)
+
     def customSignalHandler(self, value):
         # 接收到解析命令结束的信号
         logger.info("Custom signal handler: {}".format(value))
-        if value == "SUCCESS":
-            self.stateTooltip.setContent('解析完成')
-            self.stateTooltip.setState(True)
-            self.runButton.setEnabled(True)
-            self.stateTooltip.show()
+        self.runButton.setText("运行")
+        self.progressText = ""
+        if self.stateTooltip is None:
+            self.stateTooltip = StateToolTip('正在解析', '', self)
+            self.bottomStateLayout.addWidget(self.stateTooltip, 0, Qt.AlignmentFlag.AlignRight)
 
-        elif value == "ERROR":
-            self.stateTooltip.setContent('解析失败')
-            self.stateTooltip.setState(False)
-            self.runButton.setEnabled(True)
-            self.stateTooltip.show()
+        if value == "SUCCESS":
+            self.stateTooltip.setTitle('解析完成')
+            self.stateTooltip.setContent('解析完成')
         else:
-            logger.info(value)
+            self.stateTooltip.setTitle('解析失败')
+            self.stateTooltip.setContent('解析失败，请查看日志')
+        self.stateTooltip.setState(True)
+        self.stateTooltip.show()
+        self.stateTooltip = None
 
         # 打开输出目录
         os.system("start {}".format(self.output_path))
 
-    def start_task(self, command, shell):
+    def start_task(self, command, shell, env):
         logger.info("Start task")
-        self.worker = Worker(command, shell=shell)
+        done_file = os.path.join(self.output_path, '.parse_done')
+        self.worker = Worker(command, shell=shell, env=env, done_file=done_file)
         self.worker.signal.connect(self.customSignalHandler)
+        self.worker.progress.connect(self.progressHandler)
         self.worker.start()
 
     def runButtonClicked(self):
         logger.info("Run Button Clicked")
+        if self.worker is not None and self.worker.isRunning():
+            self.showParsingFlyout()
+            return
+
         # 获取chooseButton/ vmlinuxButton/ comboBox/ platformComboBox/ lineEdit的值
         logger.info("Dump directory: {}".format(self.dumpdir))
         logger.info("Vmlinux file: {}".format(self.vmlinuxfile))
@@ -462,21 +551,23 @@ class SettinsCard(GroupHeaderCardWidget):
             self.showFileStyleErrorFlyout()
         else:
             self.stateTooltip = StateToolTip('正在解析', '客官请耐心等待哦~~', self)
+            self.stateTooltip.closedSignal.connect(self.onStateTooltipClosed)
             # 状态提示放到中心位置
             self.bottomStateLayout.addWidget(self.stateTooltip, 0, Qt.AlignmentFlag.AlignRight)
-            self.vBoxLayout.addLayout(self.bottomStateLayout)
+            if self.bottomStateLayout.parent() is None:
+                self.vBoxLayout.addLayout(self.bottomStateLayout)
             # 显示状态提示
             self.stateTooltip.show()
 
-            # runbuton按钮设置为不可点击
-            self.runButton.setDisabled(True)
+            self.runButton.setText("解析中...")
 
             logger.info("Run parse with GNU tools path: {}".format(GNU_TOOLS_PATH))
             ramdump_parse_tool_path = linuxPath2winPath(os.path.join(CURRENT_PLUGIN_DIR, 'linux-ramdump-parser-v2'))
             #gdb64_path = linuxPath2winPath(os.path.join(GNU_TOOLS_PATH, 'bin', 'gdb.exe'))
             #nm64_path = linuxPath2winPath(os.path.join(GNU_TOOLS_PATH, 'bin', 'aarch64-linux-gnu-nm.exe'))
             #objdump64_path = linuxPath2winPath(os.path.join(GNU_TOOLS_PATH, 'bin', 'aarch64-linux-gnu-objdump.exe'))
-            self.output_path = linuxPath2winPath(os.path.join(self.dumpdir, 'parser_output'))
+            self.output_path = linuxPath2winPath(os.path.join(
+                self.dumpdir, 'parser_output_{}'.format(time.strftime('%Y%m%d_%H%M%S'))))
 
             #logger.info("gdb64_path: {}".format(gdb64_path))
             #logger.info("nm64_path: {}".format(nm64_path))
@@ -488,15 +579,18 @@ class SettinsCard(GroupHeaderCardWidget):
             env = os.environ.copy()
             env['PATH'] = os.pathsep.join([os.environ['PATH'], PYTHON_BIN_ROOT])
             env['PATH'] = os.pathsep.join([env['PATH'], os.path.join(PYTHON_BIN_ROOT, 'Scripts')])
+            env['PYTHONUNBUFFERED'] = '1'
+            env['PYTHONIOENCODING'] = 'utf-8'
+            python_path = PYTHON_BIN_PATH if os.path.isfile(PYTHON_BIN_PATH) else sys.executable
 
             if not self.ModlineEdit.text() == "":
                 command = '{} {}\\ramparse.py -v {} -a {} -o {} --force-hardware {} -m {}'.format(
-                        PYTHON_BIN_PATH,
+                        python_path,
                         ramdump_parse_tool_path,
                         self.vmlinuxfile, self.dumpdir, self.output_path, self.platformComboBox.currentText(), self.ModlineEdit.text())
             else:
                 command = '{} {}\\ramparse.py -v {} -a {} -o {} --force-hardware {}'.format(
-                        PYTHON_BIN_PATH,
+                        python_path,
                         ramdump_parse_tool_path,
                         self.vmlinuxfile, self.dumpdir, self.output_path, self.platformComboBox.currentText())
 
@@ -508,7 +602,7 @@ class SettinsCard(GroupHeaderCardWidget):
 
             logger.info("Run command: {}".format(command))
 
-            self.start_task(command, shell)
+            self.start_task(command, shell, env)
     
 
 class LightBox(QWidget):

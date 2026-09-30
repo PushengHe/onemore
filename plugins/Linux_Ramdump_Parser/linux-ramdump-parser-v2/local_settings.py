@@ -1,25 +1,17 @@
-from loguru import logger
 import os
 
-# get the path of the current file
-current_file_path = os.path.abspath(__file__)
-# get the directory of the current file
-current_dir = os.path.dirname(current_file_path)
-# get the parent directory of the current directory
-current_plugin_dir = os.path.dirname(current_dir)
 
-#logger.info("[LIUQI] tools_dir: {}".format(current_plugin_dir))
+toolchain_bin_dir = os.path.abspath(os.path.join(
+	os.path.dirname(__file__), '..', '..', '..', 'tools', 'gnu-tools-14', 'bin'
+))
 
-# tools目录是插件目录的父级目录的父级目录下的tools目录
-tools_dir = os.path.join(current_plugin_dir, '..', '..', 'tools')
+gdb64_path = os.path.join(toolchain_bin_dir, 'aarch64-none-linux-gnu-gdb.exe')
+nm64_path = os.path.join(toolchain_bin_dir, 'aarch64-none-linux-gnu-nm.exe')
+objdump64_path = os.path.join(toolchain_bin_dir, 'aarch64-none-linux-gnu-objdump.exe')
 
-#logger.info("[LIUQI] tools_dir: {}".format(tools_dir))
-
-# path to the directory where the gnu-tools
-gnu_tools_dir = os.path.join(tools_dir, 'gnu-tools')
-
-android_tools_dir = os.path.join(tools_dir, 'android-sdk')
-
-gdb64_path = os.path.join(android_tools_dir, 'python', 'bin', 'gdb.exe')
-nm64_path = os.path.join(gnu_tools_dir, 'bin', 'llvm-nm.exe')
-objdump64_path = os.path.join(gnu_tools_dir, 'bin', 'llvm-objdump.exe')
+'''
+gdb_path - absolute path to the gdb tool for the ramdumps
+nm_path - absolute path to the gdb tool for the ramdumps
+gdb64_path - absolute path to the 64-bit gdb tool for the ramdumps
+nm64_path - absolute path to the 64-bit nm tool for the ramdumps
+'''

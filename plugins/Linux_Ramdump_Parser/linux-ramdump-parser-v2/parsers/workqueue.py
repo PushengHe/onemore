@@ -10,7 +10,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-import re,os
+import re
 import linux_list, linux_hlist
 from parser_util import register_parser, RamParser, cleanupString
 
@@ -523,7 +523,7 @@ class Workqueues(RamParser):
             unbound_pool_hash =  unbound_pool_hash_base + hash_entry_size * hash_index
 
     def parse(self):
-            self.f = open(os.path.join(self.ramdump.outdir, "workqueue.txt"), "w")
+            self.f = self.ramdump.open_file('workqueue.txt')
             major, minor, patch = self.ramdump.kernel_version
             if (major, minor) == (3, 0):
                     print_workqueue_state_3_0(self.ramdump)

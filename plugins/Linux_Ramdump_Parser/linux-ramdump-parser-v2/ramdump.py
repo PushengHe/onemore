@@ -822,6 +822,7 @@ class RamDump():
         self.ko_file_dict = {}
         self.ko_text_address_dict = {}
         self.dump = None
+        self.zram_parser_override = options.zram_parser_override
 
         if gdb_ndk_path:
             self.gdbmi = gdbmi.GdbMI(self.gdb_ndk_path, self.vmlinux,
@@ -1039,6 +1040,8 @@ class RamDump():
             saved_config.write(l + '\n')
 
         saved_config.close()
+        if self.is_config_defined("CONFIG_VMSPLIT_2G") and not self.arm64 and self.get_kernel_version() >= (6, 6):
+            self.page_offset = 0x80000000	#For ARM32 with VMSPLIT_2G Enabled
         try:
             self.va_bits = int(self.get_config_val("CONFIG_ARM64_VA_BITS"))
         except:
@@ -1211,22 +1214,6 @@ class RamDump():
         mm_init(self)
         self.set_available_cores()
         self.arm_smmu_v12 = self.is_arm_smmu_v12()
-
-        self.platform_config = []
-        self.platform_config_dict = {}
-        if not self.get_platform_config():
-            print_out_str('!!! Could not get saved configuration')
-            print_out_str(
-                '!!! This is really bad and probably indicates RAM corruption')
-            print_out_str('!!! Some features may be disabled!')
-
-        # extract kernel's configuration to kconfig.txt
-        saved_platform_config = self.open_file('platform_kconfig.txt')
-        for l in self.platform_config:
-            saved_platform_config.write(l + '\n')
-
-        saved_platform_config.close()
-
     def pgtable_l5_enabled(self):
         return self.pgtable_levels == 5 and self.vabits_actual == self.va_bits
 
@@ -1388,54 +1375,6 @@ class RamDump():
                 cfg = l[:eql]
                 val = l[eql+1:]
                 self.config_dict[cfg] = val.strip()
-        return True
-
-    def get_platform_config(self):
-        kconfig_addr = self.address_of('platform_kernel_config_data')
-        if kconfig_addr is None:
-            return
-        if self.get_kernel_version() > (5, 0, 0):
-            kconfig_addr_end = self.address_of('platform_kernel_config_data_end')
-            if kconfig_addr_end is None:
-                return
-            kconfig_size = kconfig_addr_end - kconfig_addr
-            # magic is 8 bytes before kconfig_addr and data
-            # starts at kconfig_addr for kernel > 5.0.0
-            kconfig_addr = kconfig_addr - 8
-        else:
-            kconfig_size = self.sizeof('platform_kernel_config_data')
-            # size includes magic, offset from it
-            kconfig_size = kconfig_size - 16 - 1
-
-        # kconfig data starts with magic 8 byte string, go past that
-        zconfig = os.path.join(self.outdir, "platform_elf_temp.txt")
-        temp_file = open(zconfig, 'wb+')
-        size = kconfig_addr + 8
-        s = self.read_elf_memory(kconfig_addr, size, temp_file)
-        temp_file.close()
-        if s != 'IKCFG_ST':
-            print_out_str("platform_kernel_config_data magic not found")
-            return
-        temp_file = open(zconfig, 'wb+')
-        kconfig_addr = kconfig_addr + 8
-        val = self.read_elf_memory(kconfig_addr, kconfig_size + kconfig_addr,
-                                      temp_file)
-
-        temp_file.close()
-        zconfig_in = gzip.open(temp_file.name, 'rt')
-        try:
-            t = zconfig_in.readlines()
-        except:
-            return False
-        zconfig_in.close()
-        os.remove(zconfig)
-        for l in t:
-            self.platform_config.append(l.rstrip())
-            if not l.startswith('#') and l.strip() != '':
-                eql = l.find('=')
-                cfg = l[:eql]
-                val = l[eql+1:]
-                self.platform_config_dict[cfg] = val.strip()
         return True
 
     def get_config_val(self, config):
@@ -1923,6 +1862,12 @@ class RamDump():
 
         startup_script.write(
             'v.v  %ASCII %STRING linux_banner\n')
+
+        if not self.is_config_defined('CONFIG_SMP'):
+            if self.get_kernel_version() >= (6, 6):
+                if not self.arm64:
+                    startup_script.write('SYStem.Option MMUSPACES OFF\n')
+
         if os.path.exists(os.path.join(out_path, 'regs_panic.cmm')):
             startup_script.write(
                 'do {0}\n'.format(out_path + '/regs_panic.cmm'))
@@ -2541,26 +2486,30 @@ class RamDump():
         text_offset = 0
         for section in elffile.iter_sections():
             header = section.header
+            is_init = re.match(r".init", section.name)
+            if is_init is not None:
+                continue
+
+            if section.name == ".text":
+                break
+
+            plt_entry_size = self.sizeof('struct plt_entry')
+            if section.name == ".plt":
+                text_offset = align_up(text_offset, 64)   #plt align is 64
+                sh_size = plt_entry_size * plt_num
+                text_offset += sh_size
+                continue
+
+            if section.name == ".text.ftrace_trampoline":
+                text_offset = align_up(text_offset, 4)    #.text.ftrace_trampoline align is 4
+                sh_size = plt_entry_size * ftrace_plt_num
+                text_offset += sh_size
+                continue
+
             if (header['sh_flags'] & (constants.SH_FLAGS.SHF_ALLOC | constants.SH_FLAGS.SHF_EXECINSTR)) == \
                 (constants.SH_FLAGS.SHF_ALLOC | constants.SH_FLAGS.SHF_EXECINSTR):
-                is_init = re.match(r".init", section.name)
-                if is_init is not None:
-                    continue
-
-                if section.name == ".text":
-                    break
-
-                plt_entry_size = self.sizeof('struct plt_entry')
-                if section.name == ".plt":
-                    text_offset = align_up(text_offset, 64)   #plt align is 64
-                    sh_size = plt_entry_size * plt_num
-                elif section.name == ".text.ftrace_trampoline":
-                    text_offset = align_up(text_offset, 4)    #.text.ftrace_trampoline align is 4
-                    sh_size = plt_entry_size * ftrace_plt_num
-                else:
-                    text_offset = align_up(text_offset, header['sh_addralign'])
-                    sh_size = header['sh_size']
-
+                text_offset = align_up(text_offset, header['sh_addralign'])
+                sh_size = header['sh_size']
                 text_offset += sh_size
 
         if self.kernel_version >= (6, 1) and self.kernel_version < (6, 6): # kp 3.0
@@ -3678,7 +3627,7 @@ class RamDump():
                 next = task_struct
                 if (next == init_task):
                     break
-        except Exception as e:
+        except:
             print_out_exception()
 
     '''
@@ -3696,9 +3645,14 @@ class RamDump():
         offset_thread_head = self.field_offset(
             'struct signal_struct', 'thread_head')
         try:
+            '''
+            reference the kernel code to fetch the threads info
+            #define for_each_thread(p, t)		\
+	            __for_each_thread((p)->signal, t)
+            '''
             signal_addr = self.read_word(task_addr + offset_signal)
-            thread_head_addr = self.read_word(signal_addr + offset_thread_head)
-            next_thread_head = thread_head_addr
+            thread_head_addr = signal_addr + offset_thread_head
+            next_thread_head = self.read_word(thread_head_addr)
             seen_threads = []
 
             while True:
@@ -3720,7 +3674,7 @@ class RamDump():
                 next_thread_head = next_thr
                 if next_thread_head == thread_head_addr:
                     break
-        except Exception as e:
+        except:
             print_out_exception()
 
     def validate_task_struct(self, task):

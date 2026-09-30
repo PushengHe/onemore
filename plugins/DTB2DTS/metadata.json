@@ -1,9 +1,0 @@
-  {
-    "name": "DTB2DTS",
-    "description": "将设备树二进制文件(DTB)转换为设备树源文件(DTS)的工具",
-    "version": "1.0.0",
-    "author": "iliuqi",
-    "logo": "logo.png",
-    "entry": "plugin.py",
-    "zip_url": "https://raw.githubusercontent.com/PushengHe/onemore/refs/heads/dev/release/DTB2DTS.zip"
-  }

@@ -1,9 +1,0 @@
-{
-    "name": "Stability-AI",
-    "description": "一款利用AI自动分析内核日志，并生成详细报告的工具，帮助用户快速定位和解决问题。",
-    "version": "v1.0.6",
-    "logo": "logo.png",
-    "author": "iliuqi",
-    "entry": "plugin.py",
-    "zip_url": "https://raw.githubusercontent.com/PushengHe/onemore/refs/heads/dev/release/Stability-AI.zip"
-}

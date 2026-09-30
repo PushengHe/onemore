@@ -293,7 +293,6 @@ def get_rss(ramdump, task_struct):
     if ramdump.kernel_version >= (6, 2):
         # /* 6.2: struct percpu_counter rss_stat[NR_MM_COUNTERS] */
         mm = ramdump.read_datatype(mm_struct, 'struct mm_struct')
-        print("dir(mm) == {}".format(dir(mm)))
         file_rss = get_mm_counter(ramdump, mm.rss_stat[0])
         anon_rss = get_mm_counter(ramdump, mm.rss_stat[1])
         swap_rss = get_mm_counter(ramdump, mm.rss_stat[2])

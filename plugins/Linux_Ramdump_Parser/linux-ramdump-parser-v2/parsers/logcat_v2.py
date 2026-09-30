@@ -155,10 +155,6 @@ def parse_logcat_v2(ramdump):
             while logdmap != 0:
                 tmpstartVm = ramdump.read_structure_field(logdmap, 'struct vm_area_struct', 'vm_start')
                 tmpendVm   = ramdump.read_structure_field(logdmap, 'struct vm_area_struct', 'vm_end')
-
-                if tmpstartVm == None or tmpendVm == None:
-                    continue
-
                 logd_count = logd_count + 1
                 if (end_data > tmpstartVm) and (end_data < tmpendVm):
                     # android P and older : 3 logd vma, bss section is just after end_data

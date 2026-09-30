@@ -1,5 +1,4 @@
-# Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
-# Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -30,7 +29,7 @@ class Properties(RamParser):
         self.OFFSET_DATA = self.SIZEOF_PROP_AREA
         self.PROP_NAME_MAX=100
         self.PROP_VALUE_MAX=92
-        self.proplist = []
+        self.proplist = {}
         self.data = ""
         self.header = ""
 
@@ -61,7 +60,15 @@ class Properties(RamParser):
                     self.OFFSET_DATA + prop + self.SIZEOF_PROP_INFO :
                     self.OFFSET_DATA + prop + self.SIZEOF_PROP_INFO + self.PROP_NAME_MAX
                     ].decode('ascii', 'ignore').split('\0')[0]
-                self.proplist.append([name, value])
+
+                if len(name.strip()) == 0:
+                    return True
+
+                if name in self.proplist:
+                    if len(value.strip()) != 0 and value != self.proplist[name]:
+                        self.proplist[name] = self.proplist[name] +"  compact value=" + value
+                else:
+                    self.proplist[name] = value
         if children != 0:
             err = self.foreach_property(children)
             if not err:
@@ -205,7 +212,7 @@ class Properties(RamParser):
             if self.header:
                 out_file.write(self.header)
 
-            for name, value in self.proplist:
+            for name, value in self.proplist.items():
                 out_file.write("{}={}\n".format(name, value))
         return len(self.proplist) > 0
 
