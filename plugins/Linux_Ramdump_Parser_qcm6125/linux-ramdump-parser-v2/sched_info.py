@@ -186,8 +186,12 @@ def dump_cpufreq_data(ramdump):
         if (ramdump.kernel_version >= (5, 10, 0)):
             try:
                 max_thermal_cap = (1 << SCHED_CAPACITY_SHIFT)
-                thermal_pressure = ramdump.read_u64(ramdump.address_of('thermal_pressure') + ramdump.per_cpu_offset(i))
-                thermal_cap = max_thermal_cap - thermal_pressure
+                thermal_pressure_addr = ramdump.address_of('thermal_pressure')
+                if thermal_pressure_addr is not None:
+                    thermal_pressure = ramdump.read_u64(thermal_pressure_addr + ramdump.per_cpu_offset(i))
+                    thermal_cap = max_thermal_cap - thermal_pressure
+                else:
+                    thermal_cap = max_thermal_cap
             except Exception as err:
                 print(err)
         else:
@@ -209,7 +213,11 @@ def dump_cpufreq_data(ramdump):
                 .format(i, min_freq, cpuinfo_min_freq)
             anomaly.addWarning("HLOS", "dmesg_TZ.txt", anomaly_str)
         try:
-            arch_scale = ramdump.read_int(ramdump.address_of('cpu_scale') + ramdump.per_cpu_offset(i))
+            cpu_scale_addr = ramdump.address_of('cpu_scale')
+            if cpu_scale_addr is not None:
+                arch_scale = ramdump.read_int(cpu_scale_addr + ramdump.per_cpu_offset(i))
+            else:
+                arch_scale = None
             print_out_str("\tCapacity: capacity_orig:{0}, cur_cap:{1}, arch_scale:{2}\n".format(cap_orig, curr_cap, arch_scale))
         except Exception as err:
             print(err)
