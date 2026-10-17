@@ -1,19 +1,22 @@
 Set shell = CreateObject("WScript.Shell")
 Set files = CreateObject("Scripting.FileSystemObject")
 
-If shell.Run("cmd /d /c where python >nul 2>&1", 0, True) <> 0 Then
-    MsgBox "Python was not found. Please install Python 3.10 or newer and add it to PATH." & vbCrLf & "https://www.python.org/downloads/", vbCritical, "OneMore"
-    WScript.Quit 1
-End If
-
-If shell.Run("cmd /d /c python -c ""import sys; sys.exit(sys.version_info < (3, 10))"" >nul 2>&1", 0, True) <> 0 Then
-    MsgBox "A working Python 3.10 or newer installation is required." & vbCrLf & "https://www.python.org/downloads/", vbCritical, "OneMore"
-    WScript.Quit 1
-End If
-
 folder = files.GetParentFolderName(WScript.ScriptFullName)
+localPython = folder & "\tools\Python310\python.exe"
+
+If Not files.FileExists(localPython) Then
+    MsgBox "Python not found at:" & vbCrLf & localPython & vbCrLf & vbCrLf & "Please place Python 3.10+ in the tools\Python310 folder.", vbCritical, "OneMore"
+    WScript.Quit 1
+End If
+
+ret = shell.Run("""" & localPython & """ -c ""import sys; sys.exit(sys.version_info < (3, 10))"" >nul 2>&1", 0, True)
+If ret <> 0 Then
+    MsgBox "Python at tools\Python310 must be version 3.10 or newer.", vbCritical, "OneMore"
+    WScript.Quit 1
+End If
+
 shell.CurrentDirectory = folder
-shell.Run "cmd /d /c " & Chr(34) & Chr(34) & folder & "\start_onemore.bat" & Chr(34) & Chr(34), 0, False
+shell.Run """" & folder & "\start_onemore.bat"" """ & localPython & """", 0, False
 
 Set processes = GetObject("winmgmts:root\cimv2")
 For attempt = 1 To 100
